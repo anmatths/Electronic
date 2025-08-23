@@ -10,18 +10,19 @@ const char *password = "M4tr1z_R0j4*";
 const char *endpoint = "https://timbre-telegram-worker.tempusorione.workers.dev";
 const char *message = "Despiertate! Movimiento detectado.";
 
+bool needSentMessage = false;
+
 // -- Configuración --
 const unsigned long SAMPLE_INTERVAL = 1000;
 const unsigned long SLEEP_CONFIRM_TIME = 10 * 1 * 1000; // 10 minutos
-const unsigned long WAKE_CONFIRM_TIME = 7 * 1000;      // 7 segundos
+const unsigned long WAKE_CONFIRM_TIME = 15 * 1000;      // 30 segundos
 const float ANGLE_THRESHOLD = 10.0;                     // grados de cambio
 
 // -- Estado --
 bool isAwake = true;
-bool needSentMessage = false;
 unsigned long lastSampleTime = 0;
 unsigned long sleepTimer = 0;
-long wakeTimer = 0;
+unsigned long wakeTimer = 0;
 float refPitch = 0.0;
 float refRoll = 0.0;
 
@@ -61,65 +62,55 @@ void analizeState()
 
   if (isAwake)
   {
-    detectSleep(pitch, roll);
-  }
-  else
-  {
-    detectAwake(pitch, roll);
-  }
-}
-
-void detectSleep(float pitch, float roll)
-{
-  if (isStable(pitch, roll))
-  {
-    sleepTimer += SAMPLE_INTERVAL;
-    if (sleepTimer >= SLEEP_CONFIRM_TIME)
+    if (isStable(pitch, roll))
     {
-      isAwake = false;
-      needSentMessage = true;
-      wakeTimer = 0;
-      refPitch = pitch;
-      refRoll = roll;
-      Serial.println("🛌 Estado: Dormido");
-    }
-  }
-  else
-  {
-    sleepTimer = 0;
-    refPitch = pitch;
-    refRoll = roll;
-  }
-}
-
-void detectAwake(float pitch, float roll)
-{
-  if (isMoved(pitch, roll))
-  {
-    wakeTimer += SAMPLE_INTERVAL;
-    Serial.println("Estado: se movio durante -> " + String(wakeTimer / 1000) + "s");
-
-    if (wakeTimer >= WAKE_CONFIRM_TIME && needSentMessage)
-    {
-      isAwake = true;
-      sleepTimer = 0;
-      refPitch = pitch;
-      refRoll = roll;
-      Serial.println("🌞 Estado: Despierto");
-
-      sendWakeMessage();
-    }
-  }
-  else
-  {
-    if (wakeTimer > 0)
-    {
-      wakeTimer -= SAMPLE_INTERVAL / 3;
-      Serial.println("Estado: se quedo quieto luego de -> " + String(wakeTimer / 1000) + "s");
+      sleepTimer += SAMPLE_INTERVAL;
+      if (sleepTimer >= SLEEP_CONFIRM_TIME)
+      {
+        isAwake = false;
+        needSentMessage = true;
+        wakeTimer = 0;
+        refPitch = pitch;
+        refRoll = roll;
+        Serial.println("🛌 Estado: Dormido");
+      }
     }
     else
     {
-      wakeTimer = 0;
+      sleepTimer = 0;
+      refPitch = pitch;
+      refRoll = roll;
+    }
+  }
+  else
+  {
+    if (isMoved(pitch, roll))
+    {
+      wakeTimer += SAMPLE_INTERVAL;
+      //Serial.println("Estado: se movio durante -> " + String(wakeTimer / 1000) + "s");
+
+      if (wakeTimer >= WAKE_CONFIRM_TIME && needSentMessage)
+      {
+        isAwake = true;
+        sleepTimer = 0;
+        refPitch = pitch;
+        refRoll = roll;
+        Serial.println("🌞 Estado: Despierto");
+
+        sendWakeMessage();
+      }
+    }
+    else
+    {
+      //Serial.println("Estado: se quedo quieto luego de -> " + String(wakeTimer / 1000) + "s");
+      if (wakeTimer > 0)
+      {
+        wakeTimer -= SAMPLE_INTERVAL / 3;
+      }
+      else
+      {
+        wakeTimer = 0;
+      }
     }
   }
 }

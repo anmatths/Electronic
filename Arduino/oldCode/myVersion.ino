@@ -57,12 +57,12 @@ void setup() {
 
 void loop(){  
   Serial.println("Loop start");
-  detectState();
+  analizeState();
   Serial.println("Loop end\n");
   delay(1000); // Sampling every 100ms
 }
 
-void detectState(){
+void analizeState(){
 
   if(isAwake){
     detectSleep()
