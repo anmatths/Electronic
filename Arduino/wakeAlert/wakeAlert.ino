@@ -13,7 +13,7 @@ const char *message = "Despiertate! Movimiento detectado.";
 // -- Configuración --
 const unsigned long SAMPLE_INTERVAL = 1000;
 const unsigned long SLEEP_CONFIRM_TIME = 10 * 1 * 1000; // 10 minutos
-const unsigned long WAKE_CONFIRM_TIME = 7 * 1000;      // 7 segundos
+const unsigned long WAKE_CONFIRM_TIME = 10 * 1000;      // 7 segundos
 const float ANGLE_THRESHOLD = 10.0;                     // grados de cambio
 
 // -- Estado --
