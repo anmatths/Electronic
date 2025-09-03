@@ -8,13 +8,13 @@ MPU6050 mpu;
 const char *ssid = "SG24";
 const char *password = "M4tr1z_R0j4*";
 const char *endpoint = "https://timbre-telegram-worker.tempusorione.workers.dev";
-const char *message = "Despiertate! Movimiento detectado.";
 
 // -- Configuración --
 const unsigned long SAMPLE_INTERVAL = 1000;
-const unsigned long SLEEP_CONFIRM_TIME = 10 * 1 * 1000; // 10 minutos
-const unsigned long WAKE_CONFIRM_TIME = 10 * 1000;      // 7 segundos
-const float ANGLE_THRESHOLD = 10.0;                     // grados de cambio
+const unsigned long SLEEP_CONFIRM_TIME = 1 * 60 * 1000; // 10 minutos
+const unsigned long WAKE_CONFIRM_TIME = 7 * 1000;      // 7 segundos
+const float ANGLE_THRESHOLD = 3.0;                     // grados de cambio
+const float ACCEL_THRESHOLD = 0.04; // Ajusta según pruebas (g)
 
 // -- Estado --
 bool isAwake = true;
@@ -24,6 +24,7 @@ unsigned long sleepTimer = 0;
 long wakeTimer = 0;
 float refPitch = 0.0;
 float refRoll = 0.0;
+float refAccel = 0.0; // <-- Nuevo: referencia de aceleración
 
 void setup()
 {
@@ -56,22 +57,22 @@ void loop()
 
 void analizeState()
 {
-  float pitch, roll;
-  readAngles(pitch, roll);
+  float pitch, roll, accel;
+  readAngles(pitch, roll, accel);
 
   if (isAwake)
   {
-    detectSleep(pitch, roll);
+    detectSleep(pitch, roll, accel);
   }
   else
   {
-    detectAwake(pitch, roll);
+    detectAwake(pitch, roll, accel);
   }
 }
 
-void detectSleep(float pitch, float roll)
+void detectSleep(float pitch, float roll, float accel)
 {
-  if (isStable(pitch, roll))
+  if (isStable(pitch, roll, accel))
   {
     sleepTimer += SAMPLE_INTERVAL;
     if (sleepTimer >= SLEEP_CONFIRM_TIME)
@@ -81,7 +82,10 @@ void detectSleep(float pitch, float roll)
       wakeTimer = 0;
       refPitch = pitch;
       refRoll = roll;
+      refAccel = accel;
       Serial.println("🛌 Estado: Dormido");
+
+      sendMessage("Se quedo dormido! Party Time.");
     }
   }
   else
@@ -89,25 +93,28 @@ void detectSleep(float pitch, float roll)
     sleepTimer = 0;
     refPitch = pitch;
     refRoll = roll;
+    refAccel = accel;
   }
 }
 
-void detectAwake(float pitch, float roll)
+void detectAwake(float pitch, float roll, float accel)
 {
-  if (isMoved(pitch, roll))
+  if (isMoved(pitch, roll, accel))
   {
     wakeTimer += SAMPLE_INTERVAL;
     Serial.println("Estado: se movio durante -> " + String(wakeTimer / 1000) + "s");
 
-    if (wakeTimer >= WAKE_CONFIRM_TIME && needSentMessage)
+    if (wakeTimer >= WAKE_CONFIRM_TIME)
     {
       isAwake = true;
+      needSentMessage = true;
       sleepTimer = 0;
       refPitch = pitch;
       refRoll = roll;
+      refAccel = accel;
       Serial.println("🌞 Estado: Despierto");
 
-      sendWakeMessage();
+      sendMessage("Despiertate! Movimiento detectado.");
     }
   }
   else
@@ -124,17 +131,21 @@ void detectAwake(float pitch, float roll)
   }
 }
 
-bool isStable(float pitch, float roll)
+bool isStable(float pitch, float roll, float accel)
 {
-  return abs(pitch - refPitch) < ANGLE_THRESHOLD && abs(roll - refRoll) < ANGLE_THRESHOLD;
+  return abs(pitch - refPitch) < ANGLE_THRESHOLD &&
+         abs(roll - refRoll) < ANGLE_THRESHOLD &&
+         abs(accel - refAccel) < ACCEL_THRESHOLD;
 }
 
-bool isMoved(float pitch, float roll)
+bool isMoved(float pitch, float roll, float accel)
 {
-  return abs(pitch - refPitch) > ANGLE_THRESHOLD || abs(roll - refRoll) > ANGLE_THRESHOLD;
+  return abs(pitch - refPitch) > ANGLE_THRESHOLD ||
+         abs(roll - refRoll) > ANGLE_THRESHOLD ||
+         abs(accel - refAccel) > ACCEL_THRESHOLD;
 }
 
-void readAngles(float &pitch, float &roll)
+void readAngles(float &pitch, float &roll, float &accel)
 {
   int16_t ax, ay, az, gx, gy, gz;
   mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
@@ -145,14 +156,16 @@ void readAngles(float &pitch, float &roll)
 
   roll = atan2(ay_g, az_g) * RAD_TO_DEG;
   pitch = atan2(-ax_g, sqrt(ay_g * ay_g + az_g * az_g)) * RAD_TO_DEG;
+  accel = sqrt(ax_g * ax_g + ay_g * ay_g + az_g * az_g); // <-- Módulo total
 }
 
 void updateReferenceAngles()
 {
-  float pitch, roll;
-  readAngles(pitch, roll);
+  float pitch, roll, accel;
+  readAngles(pitch, roll, accel);
   refPitch = pitch;
   refRoll = roll;
+  refAccel = accel;
 }
 
 bool connectWiFi(const char *ssid, const char *password, unsigned long timeoutMs = 15000)
@@ -208,14 +221,14 @@ bool sendHttpMessage(const String &endpoint, const String &payload)
   return false;
 }
 
-void sendWakeMessage()
+void sendMessage(String message)
 {
   if (!connectWiFi(ssid, password))
   {
     return; // si no conecta en el tiempo dado, salir
   }
 
-  String payload = "{\"chat_id\":\"741537983\",\"mensaje\":\"" + String(message) + "\"}";
+  String payload = "{\"chat_id\":\"741537983\",\"mensaje\":\"" + message + "\"}";
 
   // Reintentos hasta éxito
   while (!sendHttpMessage(endpoint, payload))
